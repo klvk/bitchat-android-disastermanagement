@@ -31,6 +31,7 @@ import com.bitchat.android.nostr.GeohashAliasRegistry
 import com.bitchat.android.util.dataFromHexString
 import com.bitchat.android.util.hexEncodedString
 import java.security.MessageDigest
+import com.bitchat.android.services.DisasterVerificationService
 
 /**
  * Refactored ChatViewModel - Main coordinator for bitchat functionality
@@ -184,6 +185,9 @@ class ChatViewModel(
     val geohashPeople: StateFlow<List<GeoPerson>> = state.geohashPeople
     val teleportedGeo: StateFlow<Set<String>> = state.teleportedGeo
     val geohashParticipantCounts: StateFlow<Map<String, Int>> = state.geohashParticipantCounts
+
+    val isChatEnabled: StateFlow<Boolean> = state.isChatEnabled
+    val isDisasterAlertActive: StateFlow<Boolean> = state.isDisasterAlertActive
 
     init {
         // Note: Mesh service delegate is now set by MainActivity
@@ -471,6 +475,14 @@ class ChatViewModel(
     // MARK: - Message Sending
     
     fun sendMessage(content: String) {
+        if (!state.isChatEnabled.value) {
+            // Allow only specific commands if needed, or block completely
+            // For now, block everything except maybe internal debug commands?
+            // Requirement says: "remove the send message feature until the alert pops up"
+            // So we return early.
+            return
+        }
+
         if (content.isEmpty()) return
         
         // Check for commands
@@ -861,6 +873,13 @@ class ChatViewModel(
     // MARK: - BluetoothMeshDelegate Implementation (delegated)
     
     override fun didReceiveMessage(message: BitchatMessage) {
+        if (message.content.startsWith("DISASTER_ALERT:")) {
+            val alertText = message.content.removePrefix("DISASTER_ALERT:")
+            viewModelScope.launch {
+                activateDisasterMode()
+                messageManager.addSystemMessage("🚨 DISASTER ALERT RECEIVED: $alertText")
+            }
+        }
         meshDelegateHandler.didReceiveMessage(message)
     }
     
@@ -902,6 +921,44 @@ class ChatViewModel(
     
     // registerPeerPublicKey REMOVED - fingerprints now handled centrally in PeerManager
     
+    // MARK: - Disaster Alert System
+
+    fun triggerDisasterAlert(description: String, imagePath: String?) {
+        viewModelScope.launch {
+            val service = DisasterVerificationService()
+            val verified = service.verifyDisaster(getApplication(), description, imagePath)
+            if (verified) {
+                broadcastDisasterAlert(description)
+            } else {
+                messageManager.addSystemMessage("Disaster verification failed.")
+            }
+        }
+    }
+
+    private fun broadcastDisasterAlert(description: String) {
+        val alertMessage = "DISASTER_ALERT:$description"
+        meshService.sendMessage(alertMessage) // Broadcast to all
+        activateDisasterMode()
+    }
+
+    private fun activateDisasterMode() {
+        if (state.isDisasterAlertActive.value) return
+
+        viewModelScope.launch {
+            state.setIsDisasterAlertActive(true)
+            state.setIsChatEnabled(true)
+
+            messageManager.addSystemMessage("🚨 EMERGENCY MODE ACTIVATED - CHAT ENABLED FOR 5 MINUTES 🚨")
+
+            // Disable after 5 minutes
+            delay(5 * 60 * 1000L)
+
+            state.setIsChatEnabled(false)
+            state.setIsDisasterAlertActive(false)
+            messageManager.addSystemMessage("Emergency mode ended. Chat disabled.")
+        }
+    }
+
     // MARK: - Emergency Clear
     
     fun panicClearAllData() {

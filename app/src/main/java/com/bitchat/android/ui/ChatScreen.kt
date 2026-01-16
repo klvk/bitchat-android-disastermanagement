@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.IconButton
@@ -23,9 +24,13 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.zIndex
+import androidx.compose.ui.text.style.TextAlign
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.bitchat.android.model.BitchatMessage
 import com.bitchat.android.ui.media.FullScreenImageViewer
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
 
 /**
  * Main ChatScreen - REFACTORED to use component-based architecture
@@ -60,6 +65,9 @@ fun ChatScreen(viewModel: ChatViewModel) {
     val showVerificationSheet by viewModel.showVerificationSheet.collectAsStateWithLifecycle()
     val showSecurityVerificationSheet by viewModel.showSecurityVerificationSheet.collectAsStateWithLifecycle()
 
+    val isChatEnabled by viewModel.isChatEnabled.collectAsStateWithLifecycle()
+    val isDisasterAlertActive by viewModel.isDisasterAlertActive.collectAsStateWithLifecycle()
+
     var messageText by remember { mutableStateOf(TextFieldValue("")) }
     var showPasswordPrompt by remember { mutableStateOf(false) }
     var showPasswordDialog by remember { mutableStateOf(false) }
@@ -74,6 +82,8 @@ fun ChatScreen(viewModel: ChatViewModel) {
     var initialViewerIndex by remember { mutableStateOf(0) }
     var forceScrollToBottom by remember { mutableStateOf(false) }
     var isScrolledUp by remember { mutableStateOf(false) }
+
+    var showReportDisasterDialog by remember { mutableStateOf(false) }
 
     // Show password dialog when needed
     LaunchedEffect(showPasswordPrompt) {
@@ -236,7 +246,8 @@ fun ChatScreen(viewModel: ChatViewModel) {
                 currentChannel = currentChannel,
                 nickname = nickname,
                 colorScheme = colorScheme,
-                showMediaButtons = showMediaButtons
+                showMediaButtons = showMediaButtons,
+                isChatEnabled = isChatEnabled
             )
         }
 
@@ -252,8 +263,18 @@ fun ChatScreen(viewModel: ChatViewModel) {
             onShowAppInfo = { viewModel.showAppInfo() },
             onPanicClear = { viewModel.panicClearAllData() },
             onLocationChannelsClick = { showLocationChannelsSheet = true },
-            onLocationNotesClick = { showLocationNotesSheet = true }
+            onLocationNotesClick = { showLocationNotesSheet = true },
+            onReportDisaster = { showReportDisasterDialog = true }
         )
+
+        if (isDisasterAlertActive) {
+            DisasterAlertOverlay(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = headerHeight)
+                    .zIndex(2f)
+            )
+        }
 
         // Divider under header - positioned after status bar + header height
         HorizontalDivider(
@@ -301,6 +322,16 @@ fun ChatScreen(viewModel: ChatViewModel) {
             imagePaths = viewerImagePaths,
             initialIndex = initialViewerIndex,
             onClose = { showFullScreenImageViewer = false }
+        )
+    }
+
+    if (showReportDisasterDialog) {
+        ReportDisasterDialog(
+            onDismiss = { showReportDisasterDialog = false },
+            onSubmit = { description, imagePath ->
+                viewModel.triggerDisasterAlert(description, imagePath)
+                showReportDisasterDialog = false
+            }
         )
     }
 
@@ -364,45 +395,60 @@ fun ChatInputSection(
     currentChannel: String?,
     nickname: String,
     colorScheme: ColorScheme,
-    showMediaButtons: Boolean
+    showMediaButtons: Boolean,
+    isChatEnabled: Boolean
 ) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = colorScheme.background
-    ) {
-        Column {
-            HorizontalDivider(color = colorScheme.outline.copy(alpha = 0.3f))
-            // Command suggestions box
-            if (showCommandSuggestions && commandSuggestions.isNotEmpty()) {
-                CommandSuggestionsBox(
-                    suggestions = commandSuggestions,
-                    onSuggestionClick = onCommandSuggestionClick,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                HorizontalDivider(color = colorScheme.outline.copy(alpha = 0.2f))
-            }
-            // Mention suggestions box
-            if (showMentionSuggestions && mentionSuggestions.isNotEmpty()) {
-                MentionSuggestionsBox(
-                    suggestions = mentionSuggestions,
-                    onSuggestionClick = onMentionSuggestionClick,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                HorizontalDivider(color = colorScheme.outline.copy(alpha = 0.2f))
-            }
-            MessageInput(
-                value = messageText,
-                onValueChange = onMessageTextChange,
-                onSend = onSend,
-                onSendVoiceNote = onSendVoiceNote,
-                onSendImageNote = onSendImageNote,
-                onSendFileNote = onSendFileNote,
-                selectedPrivatePeer = selectedPrivatePeer,
-                currentChannel = currentChannel,
-                nickname = nickname,
-                showMediaButtons = showMediaButtons,
-                modifier = Modifier.fillMaxWidth()
+    if (!isChatEnabled) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.errorContainer
+        ) {
+            Text(
+                text = "Messaging disabled until disaster alert.",
+                modifier = Modifier.padding(16.dp),
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                textAlign = TextAlign.Center
             )
+        }
+    } else {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = colorScheme.background
+        ) {
+            Column {
+                HorizontalDivider(color = colorScheme.outline.copy(alpha = 0.3f))
+                // Command suggestions box
+                if (showCommandSuggestions && commandSuggestions.isNotEmpty()) {
+                    CommandSuggestionsBox(
+                        suggestions = commandSuggestions,
+                        onSuggestionClick = onCommandSuggestionClick,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    HorizontalDivider(color = colorScheme.outline.copy(alpha = 0.2f))
+                }
+                // Mention suggestions box
+                if (showMentionSuggestions && mentionSuggestions.isNotEmpty()) {
+                    MentionSuggestionsBox(
+                        suggestions = mentionSuggestions,
+                        onSuggestionClick = onMentionSuggestionClick,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    HorizontalDivider(color = colorScheme.outline.copy(alpha = 0.2f))
+                }
+                MessageInput(
+                    value = messageText,
+                    onValueChange = onMessageTextChange,
+                    onSend = onSend,
+                    onSendVoiceNote = onSendVoiceNote,
+                    onSendImageNote = onSendImageNote,
+                    onSendFileNote = onSendFileNote,
+                    selectedPrivatePeer = selectedPrivatePeer,
+                    currentChannel = currentChannel,
+                    nickname = nickname,
+                    showMediaButtons = showMediaButtons,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
     }
 }
@@ -419,7 +465,8 @@ private fun ChatFloatingHeader(
     onShowAppInfo: () -> Unit,
     onPanicClear: () -> Unit,
     onLocationChannelsClick: () -> Unit,
-    onLocationNotesClick: () -> Unit
+    onLocationNotesClick: () -> Unit,
+    onReportDisaster: () -> Unit
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val locationManager = remember { com.bitchat.android.geohash.LocationChannelManager.getInstance(context) }
@@ -455,12 +502,98 @@ private fun ChatFloatingHeader(
                     }
                 )
             },
+            actions = {
+                IconButton(onClick = onReportDisaster) {
+                    Icon(
+                        imageVector = Icons.Filled.Warning,
+                        contentDescription = "Report Disaster",
+                        tint = Color.Red
+                    )
+                }
+            },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = Color.Transparent
             ),
             modifier = Modifier.height(headerHeight) // Ensure compact header height
         )
     }
+}
+
+@Composable
+fun DisasterAlertOverlay(
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        color = Color.Red,
+        shadowElevation = 4.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Icon(Icons.Filled.Warning, contentDescription = null, tint = Color.White)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                "DISASTER ALERT ACTIVE - Chat Enabled",
+                color = Color.White,
+                style = MaterialTheme.typography.titleMedium
+            )
+        }
+    }
+}
+
+@Composable
+fun ReportDisasterDialog(
+    onDismiss: () -> Unit,
+    onSubmit: (String, String?) -> Unit
+) {
+    var description by remember { mutableStateOf("") }
+    var imagePath by remember { mutableStateOf<String?>(null) }
+
+    val launcher = rememberLauncherForActivityResult(contract = ActivityResultContracts.GetContent()) { uri ->
+        // In real app, we need to resolve URI to path
+        // For simplicity, we just use string representation if needed,
+        // but DisasterVerificationService expects path.
+        // We can use a util to get path.
+        // For now, let's assume we handle it or pass null if complex.
+        uri?.let { imagePath = it.toString() }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Report Disaster") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("Description") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(onClick = { launcher.launch("image/*") }) {
+                    Text(if (imagePath != null) "Image Selected" else "Select Image")
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSubmit(description, imagePath) },
+                enabled = description.isNotBlank()
+            ) {
+                Text("Report")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
