@@ -186,7 +186,6 @@ class ChatViewModel(
     val geohashParticipantCounts: StateFlow<Map<String, Int>> = state.geohashParticipantCounts
 
     // Disaster Detection
-    private val disasterDetector = com.bitchat.android.ai.DisasterDetector()
     val isDisasterModeActive: StateFlow<Boolean> = state.isDisasterModeActive
 
     init {
@@ -866,8 +865,8 @@ class ChatViewModel(
     
     override fun didReceiveMessage(message: BitchatMessage) {
         // Check for disaster alert
-        if (message.content.contains("🚨 DISASTER DETECTED! EMERGENCY MODE ACTIVATED 🚨")) {
-            Log.w(TAG, "Received disaster alert from ${message.sender}")
+        if (message.content.startsWith("🚨")) {
+            Log.w(TAG, "Received disaster alert from ${message.sender}: ${message.content}")
             state.setIsDisasterModeActive(true)
         }
         meshDelegateHandler.didReceiveMessage(message)
@@ -1087,18 +1086,23 @@ class ChatViewModel(
 
     // MARK: - Disaster Detection & Management
 
-    fun checkForDisaster(text: String?, imagePath: String?) {
+    fun syncWithServer() {
         viewModelScope.launch {
-            // Run detection on background thread if needed, though simulated is fast
-            if (disasterDetector.detect(text, imagePath)) {
+            // Simulate network call
+            val alerts = com.bitchat.android.ai.DisasterAlertManager.fetchActiveAlerts()
+            if (alerts.isNotEmpty()) {
                 state.setIsDisasterModeActive(true)
-                broadcastDisasterAlert()
+                alerts.forEach { alert ->
+                    val message = com.bitchat.android.ai.DisasterAlertManager.generateBroadcastMessage(alert)
+                    broadcastDisasterAlert(message)
+                }
+            } else {
+                // Optionally show toast "No active alerts found"
             }
         }
     }
 
-    private fun broadcastDisasterAlert() {
-        val alertMessage = "🚨 DISASTER DETECTED! EMERGENCY MODE ACTIVATED 🚨"
+    private fun broadcastDisasterAlert(alertMessage: String) {
         Log.w(TAG, "Broadcasting disaster alert: $alertMessage")
 
         // 1. Broadcast to mesh

@@ -75,8 +75,6 @@ fun ChatScreen(viewModel: ChatViewModel) {
     var initialViewerIndex by remember { mutableStateOf(0) }
     var forceScrollToBottom by remember { mutableStateOf(false) }
     var isScrolledUp by remember { mutableStateOf(false) }
-    var showDisasterScanDialog by remember { mutableStateOf(false) }
-
     // Show password dialog when needed
     LaunchedEffect(showPasswordPrompt) {
         showPasswordDialog = showPasswordPrompt
@@ -240,7 +238,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
                 colorScheme = colorScheme,
                 showMediaButtons = showMediaButtons,
                 isDisasterModeActive = isDisasterModeActive,
-                onScanClick = { showDisasterScanDialog = true }
+                onSyncClick = { viewModel.syncWithServer() }
             )
         }
 
@@ -349,67 +347,6 @@ fun ChatScreen(viewModel: ChatViewModel) {
         onMeshPeerListDismiss = viewModel::hideMeshPeerList,
     )
 
-    if (showDisasterScanDialog) {
-        DisasterScanDialog(
-            onDismiss = { showDisasterScanDialog = false },
-            onScan = { text, imagePath ->
-                viewModel.checkForDisaster(text, imagePath)
-                showDisasterScanDialog = false
-            }
-        )
-    }
-}
-
-@Composable
-fun DisasterScanDialog(
-    onDismiss: () -> Unit,
-    onScan: (String, String?) -> Unit
-) {
-    var text by remember { mutableStateOf("") }
-    var imagePath by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Disaster Detection") },
-        text = {
-            Column {
-                Text("Enter text or description to scan for disaster keywords (e.g. 'help', 'fire').")
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    label = { Text("Situation Description") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = imagePath,
-                    onValueChange = { imagePath = it },
-                    label = { Text("Image Path (Optional)") },
-                    placeholder = { Text("/path/to/image.jpg") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Text(
-                    text = "For testing: Use '/tmp/test_disaster.jpg' to simulate disaster image.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onScan(text, if (imagePath.isBlank()) null else imagePath) }
-            ) {
-                Text("Scan")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
-    )
 }
 
 @Composable
@@ -432,7 +369,7 @@ fun ChatInputSection(
     colorScheme: ColorScheme,
     showMediaButtons: Boolean,
     isDisasterModeActive: Boolean,
-    onScanClick: () -> Unit
+    onSyncClick: () -> Unit
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -449,7 +386,7 @@ fun ChatInputSection(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "EMERGENCY MODE ACTIVE",
+                        text = "EMERGENCY MODE ACTIVE - CHAT ENABLED",
                         modifier = Modifier.padding(8.dp),
                         style = MaterialTheme.typography.labelLarge,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -462,13 +399,14 @@ fun ChatInputSection(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "Emergency Mode Only: Scan for Disaster to Enable Chat.",
+                        text = "Chat Disabled. Waiting for Emergency Alert.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Button(onClick = onScanClick) {
-                        Text("Scan for Disaster")
+                    // This button simulates the "Bridge" app connecting to the server
+                    Button(onClick = onSyncClick) {
+                        Text("Sync with Disaster Server (Bridge)")
                     }
                 }
             }
