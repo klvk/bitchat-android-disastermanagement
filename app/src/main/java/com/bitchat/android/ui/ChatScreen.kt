@@ -59,6 +59,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
     val privateChatSheetPeer by viewModel.privateChatSheetPeer.collectAsStateWithLifecycle()
     val showVerificationSheet by viewModel.showVerificationSheet.collectAsStateWithLifecycle()
     val showSecurityVerificationSheet by viewModel.showSecurityVerificationSheet.collectAsStateWithLifecycle()
+    val isDisasterModeActive by viewModel.isDisasterModeActive.collectAsStateWithLifecycle()
 
     var messageText by remember { mutableStateOf(TextFieldValue("")) }
     var showPasswordPrompt by remember { mutableStateOf(false) }
@@ -74,7 +75,6 @@ fun ChatScreen(viewModel: ChatViewModel) {
     var initialViewerIndex by remember { mutableStateOf(0) }
     var forceScrollToBottom by remember { mutableStateOf(false) }
     var isScrolledUp by remember { mutableStateOf(false) }
-
     // Show password dialog when needed
     LaunchedEffect(showPasswordPrompt) {
         showPasswordDialog = showPasswordPrompt
@@ -236,7 +236,9 @@ fun ChatScreen(viewModel: ChatViewModel) {
                 currentChannel = currentChannel,
                 nickname = nickname,
                 colorScheme = colorScheme,
-                showMediaButtons = showMediaButtons
+                showMediaButtons = showMediaButtons,
+                isDisasterModeActive = isDisasterModeActive,
+                onSyncClick = { viewModel.syncWithServer() }
             )
         }
 
@@ -344,6 +346,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
         showMeshPeerListSheet = showMeshPeerListSheet,
         onMeshPeerListDismiss = viewModel::hideMeshPeerList,
     )
+
 }
 
 @Composable
@@ -364,7 +367,9 @@ fun ChatInputSection(
     currentChannel: String?,
     nickname: String,
     colorScheme: ColorScheme,
-    showMediaButtons: Boolean
+    showMediaButtons: Boolean,
+    isDisasterModeActive: Boolean,
+    onSyncClick: () -> Unit
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -372,37 +377,74 @@ fun ChatInputSection(
     ) {
         Column {
             HorizontalDivider(color = colorScheme.outline.copy(alpha = 0.3f))
-            // Command suggestions box
-            if (showCommandSuggestions && commandSuggestions.isNotEmpty()) {
-                CommandSuggestionsBox(
-                    suggestions = commandSuggestions,
-                    onSuggestionClick = onCommandSuggestionClick,
+
+            if (isDisasterModeActive) {
+                // EMERGENCY MODE ACTIVE BANNER
+                Surface(
+                    color = Color.Red,
+                    contentColor = Color.White,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "EMERGENCY MODE ACTIVE - CHAT ENABLED",
+                        modifier = Modifier.padding(8.dp),
+                        style = MaterialTheme.typography.labelLarge,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+            } else {
+                // NORMAL MODE - CHAT DISABLED
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Chat Disabled. Waiting for Emergency Alert.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    // This button simulates the "Bridge" app connecting to the server
+                    Button(onClick = onSyncClick) {
+                        Text("Sync with Disaster Server (Bridge)")
+                    }
+                }
+            }
+
+            // Only show input if disaster mode is active
+            if (isDisasterModeActive) {
+                // Command suggestions box
+                if (showCommandSuggestions && commandSuggestions.isNotEmpty()) {
+                    CommandSuggestionsBox(
+                        suggestions = commandSuggestions,
+                        onSuggestionClick = onCommandSuggestionClick,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    HorizontalDivider(color = colorScheme.outline.copy(alpha = 0.2f))
+                }
+                // Mention suggestions box
+                if (showMentionSuggestions && mentionSuggestions.isNotEmpty()) {
+                    MentionSuggestionsBox(
+                        suggestions = mentionSuggestions,
+                        onSuggestionClick = onMentionSuggestionClick,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    HorizontalDivider(color = colorScheme.outline.copy(alpha = 0.2f))
+                }
+                MessageInput(
+                    value = messageText,
+                    onValueChange = onMessageTextChange,
+                    onSend = onSend,
+                    onSendVoiceNote = onSendVoiceNote,
+                    onSendImageNote = onSendImageNote,
+                    onSendFileNote = onSendFileNote,
+                    selectedPrivatePeer = selectedPrivatePeer,
+                    currentChannel = currentChannel,
+                    nickname = nickname,
+                    showMediaButtons = showMediaButtons,
                     modifier = Modifier.fillMaxWidth()
                 )
-                HorizontalDivider(color = colorScheme.outline.copy(alpha = 0.2f))
             }
-            // Mention suggestions box
-            if (showMentionSuggestions && mentionSuggestions.isNotEmpty()) {
-                MentionSuggestionsBox(
-                    suggestions = mentionSuggestions,
-                    onSuggestionClick = onMentionSuggestionClick,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                HorizontalDivider(color = colorScheme.outline.copy(alpha = 0.2f))
-            }
-            MessageInput(
-                value = messageText,
-                onValueChange = onMessageTextChange,
-                onSend = onSend,
-                onSendVoiceNote = onSendVoiceNote,
-                onSendImageNote = onSendImageNote,
-                onSendFileNote = onSendFileNote,
-                selectedPrivatePeer = selectedPrivatePeer,
-                currentChannel = currentChannel,
-                nickname = nickname,
-                showMediaButtons = showMediaButtons,
-                modifier = Modifier.fillMaxWidth()
-            )
         }
     }
 }

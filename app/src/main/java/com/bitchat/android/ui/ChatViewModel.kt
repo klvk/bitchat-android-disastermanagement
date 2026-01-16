@@ -185,6 +185,9 @@ class ChatViewModel(
     val teleportedGeo: StateFlow<Set<String>> = state.teleportedGeo
     val geohashParticipantCounts: StateFlow<Map<String, Int>> = state.geohashParticipantCounts
 
+    // Disaster Detection
+    val isDisasterModeActive: StateFlow<Boolean> = state.isDisasterModeActive
+
     init {
         // Note: Mesh service delegate is now set by MainActivity
         loadAndInitialize()
@@ -861,6 +864,11 @@ class ChatViewModel(
     // MARK: - BluetoothMeshDelegate Implementation (delegated)
     
     override fun didReceiveMessage(message: BitchatMessage) {
+        // Check for disaster alert
+        if (message.content.startsWith("🚨")) {
+            Log.w(TAG, "Received disaster alert from ${message.sender}: ${message.content}")
+            state.setIsDisasterModeActive(true)
+        }
         meshDelegateHandler.didReceiveMessage(message)
     }
     
@@ -1074,6 +1082,42 @@ class ChatViewModel(
      */
     fun blockUserInGeohash(targetNickname: String) {
         geohashViewModel.blockUserInGeohash(targetNickname)
+    }
+
+    // MARK: - Disaster Detection & Management
+
+    fun syncWithServer() {
+        viewModelScope.launch {
+            // Simulate network call
+            val alerts = com.bitchat.android.ai.DisasterAlertManager.fetchActiveAlerts()
+            if (alerts.isNotEmpty()) {
+                state.setIsDisasterModeActive(true)
+                alerts.forEach { alert ->
+                    val message = com.bitchat.android.ai.DisasterAlertManager.generateBroadcastMessage(alert)
+                    broadcastDisasterAlert(message)
+                }
+            } else {
+                // Optionally show toast "No active alerts found"
+            }
+        }
+    }
+
+    private fun broadcastDisasterAlert(alertMessage: String) {
+        Log.w(TAG, "Broadcasting disaster alert: $alertMessage")
+
+        // 1. Broadcast to mesh
+        meshService.sendMessage(alertMessage, null, null)
+
+        // 2. Broadcast to current location/geohash if applicable
+        val selectedLocation = state.selectedLocationChannel.value
+        if (selectedLocation is com.bitchat.android.geohash.ChannelID.Location) {
+             geohashViewModel.sendGeohashMessage(
+                 alertMessage,
+                 selectedLocation.channel,
+                 meshService.myPeerID,
+                 state.getNicknameValue()
+             )
+        }
     }
 
     // MARK: - Navigation Management
