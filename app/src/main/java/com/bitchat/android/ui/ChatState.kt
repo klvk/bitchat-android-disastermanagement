@@ -149,6 +149,9 @@ class ChatState(
     private val _geohashParticipantCounts = MutableStateFlow<Map<String, Int>>(emptyMap())
     val geohashParticipantCounts: StateFlow<Map<String, Int>> = _geohashParticipantCounts.asStateFlow()
     
+    // Disaster/Emergency Mode
+    private val _isDisasterModeActive = MutableStateFlow<Boolean>(false)
+    val isDisasterModeActive: StateFlow<Boolean> = _isDisasterModeActive.asStateFlow()
 
     val hasUnreadChannels: StateFlow<Boolean> = _unreadChannelMessages
         .map { unreadMap -> unreadMap.values.any { it > 0 } }
@@ -344,5 +347,9 @@ class ChatState(
 
     fun setPrivateChatSheetPeer(peerID: String?) {
         _privateChatSheetPeer.value = peerID
+    }
+
+    fun setIsDisasterModeActive(active: Boolean) {
+        _isDisasterModeActive.value = active
     }
 }

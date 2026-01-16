@@ -185,6 +185,10 @@ class ChatViewModel(
     val teleportedGeo: StateFlow<Set<String>> = state.teleportedGeo
     val geohashParticipantCounts: StateFlow<Map<String, Int>> = state.geohashParticipantCounts
 
+    // Disaster Detection
+    private val disasterDetector = com.bitchat.android.ai.DisasterDetector()
+    val isDisasterModeActive: StateFlow<Boolean> = state.isDisasterModeActive
+
     init {
         // Note: Mesh service delegate is now set by MainActivity
         loadAndInitialize()
@@ -861,6 +865,11 @@ class ChatViewModel(
     // MARK: - BluetoothMeshDelegate Implementation (delegated)
     
     override fun didReceiveMessage(message: BitchatMessage) {
+        // Check for disaster alert
+        if (message.content.contains("🚨 DISASTER DETECTED! EMERGENCY MODE ACTIVATED 🚨")) {
+            Log.w(TAG, "Received disaster alert from ${message.sender}")
+            state.setIsDisasterModeActive(true)
+        }
         meshDelegateHandler.didReceiveMessage(message)
     }
     
@@ -1074,6 +1083,37 @@ class ChatViewModel(
      */
     fun blockUserInGeohash(targetNickname: String) {
         geohashViewModel.blockUserInGeohash(targetNickname)
+    }
+
+    // MARK: - Disaster Detection & Management
+
+    fun checkForDisaster(text: String?, imagePath: String?) {
+        viewModelScope.launch {
+            // Run detection on background thread if needed, though simulated is fast
+            if (disasterDetector.detect(text, imagePath)) {
+                state.setIsDisasterModeActive(true)
+                broadcastDisasterAlert()
+            }
+        }
+    }
+
+    private fun broadcastDisasterAlert() {
+        val alertMessage = "🚨 DISASTER DETECTED! EMERGENCY MODE ACTIVATED 🚨"
+        Log.w(TAG, "Broadcasting disaster alert: $alertMessage")
+
+        // 1. Broadcast to mesh
+        meshService.sendMessage(alertMessage, null, null)
+
+        // 2. Broadcast to current location/geohash if applicable
+        val selectedLocation = state.selectedLocationChannel.value
+        if (selectedLocation is com.bitchat.android.geohash.ChannelID.Location) {
+             geohashViewModel.sendGeohashMessage(
+                 alertMessage,
+                 selectedLocation.channel,
+                 meshService.myPeerID,
+                 state.getNicknameValue()
+             )
+        }
     }
 
     // MARK: - Navigation Management
